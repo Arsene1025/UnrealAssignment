@@ -70,9 +70,15 @@ void UTitleWidgetBase::ConnectServer()
 	}
 
 	SaveData();
+	UDataGameInstanceSubsystem* Data = GetGameInstance()->GetSubsystem<UDataGameInstanceSubsystem>();
+	if (!Data || Data->GameServerAddress.IsEmpty())
+	{
+		SetInfoText(TEXT("현재 접속 가능한 게임 서버가 없습니다"));
+		return;
+	}
 
 	UGameplayStatics::OpenLevel(GetWorld(),
-		FName(ServerIP->GetText().ToString()),
+		FName(Data->GameServerAddress),
 		true,
 		TEXT("Key=100")
 	);
@@ -159,7 +165,16 @@ void UTitleWidgetBase::ProcessLoginResult(const bool bInSuccess, const FString& 
 	UDataGameInstanceSubsystem* Data = GI ? GI->GetSubsystem<UDataGameInstanceSubsystem>() : nullptr;
 	if (Data)
 	{
-		SetInfoText(FString::Printf(TEXT("%s (Lv.%d)"), *Data->Nickname, Data->Level));
+		if (!Data->GameServerAddress.IsEmpty())
+		{
+			SetInfoText(FString::Printf(TEXT("%s (Lv.%d) - %s 접속 중..."),
+				*Data->Nickname, Data->Level, *Data->GameServerAddress));
+		}
+		else
+		{
+			SetInfoText(FString::Printf(TEXT("%s (Lv.%d) - 등록된 게임 서버 없음"),
+				*Data->Nickname, Data->Level));
+		}
 	}
 
 	if (StartServerButton)
@@ -169,7 +184,12 @@ void UTitleWidgetBase::ProcessLoginResult(const bool bInSuccess, const FString& 
 
 	if (ConnectServerButton)
 	{
-		ConnectServerButton->SetIsEnabled(true);
+		ConnectServerButton->SetIsEnabled(Data && !Data->GameServerAddress.IsEmpty());
+	}
+
+	if (Data && !Data->GameServerAddress.IsEmpty())
+	{
+		ConnectServer();
 	}
 }
 
@@ -208,6 +228,7 @@ void UTitleWidgetBase::ClearLoginState()
 		Data->Idx = 0;
 		Data->Nickname.Empty();
 		Data->Level = 0;
+		Data->GameServerAddress.Empty();
 	}
 
 	if (StartServerButton)

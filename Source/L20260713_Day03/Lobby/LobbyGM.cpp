@@ -5,6 +5,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "LobbyGS.h"
 #include "LobbyPC.h"
+#include "../Web/WebApiSubsystem.h"
 
 void ALobbyGM::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
@@ -61,6 +62,17 @@ void ALobbyGM::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (GetNetMode() == NM_DedicatedServer || GetNetMode() == NM_ListenServer)
+	{
+		if (UGameInstance* GameInstance = GetGameInstance())
+		{
+			if (UWebApiSubsystem* WebApi = GameInstance->GetSubsystem<UWebApiSubsystem>())
+			{
+				WebApi->RequestGameServerRegistration();
+			}
+		}
+	}
+
 	
 	GetWorld()->GetTimerManager().SetTimer(
 		LeftTimeHandle,
@@ -86,7 +98,7 @@ void ALobbyGM::CountConnection()
 	{
 		GS->ConnectionCount = Count;
 
-		//ReplicatedUsingÀÌÁö¸¸ C++¿¡¼­´Â È£ÃâÀÌ ¾ÈµÊ.
+		//ReplicatedUsingì´ì§€ë§Œ C++ì—ì„œëŠ” í˜¸ì¶œì´ ì•ˆë¨.
 		GS->OnRep_ConnectionCount();
 	}
 }
@@ -100,7 +112,7 @@ void ALobbyGM::CountDownLeftTime()
 		GS->LeftTime--;
 		GS->LeftTime = FMath::Clamp(GS->LeftTime, 0, 60);
 
-		//ReplicatedUsingÀÌÁö¸¸ C++¿¡¼­´Â È£ÃâÀÌ ¾ÈµÊ.
+		//ReplicatedUsingì´ì§€ë§Œ C++ì—ì„œëŠ” í˜¸ì¶œì´ ì•ˆë¨.
 		GS->OnRep_LeftTime();
 
 		if (GS->LeftTime <= 0)

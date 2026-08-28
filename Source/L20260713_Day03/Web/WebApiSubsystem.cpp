@@ -9,6 +9,9 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/Parse.h"
 #include "../DataGameInstanceSubsystem.h"
 
 namespace
@@ -24,6 +27,55 @@ void UWebApiSubsystem::RequestLogin(const FString& InServerIP, const FString& In
 void UWebApiSubsystem::RequestSignUp(const FString& InServerIP, const FString& InUserID, const FString& InPassword)
 {
 	SendAuthRequest(InServerIP, TEXT("/signup"), InUserID, InPassword, OnSignUpResult, false);
+}
+
+void UWebApiSubsystem::RequestGameServerRegistration()
+{
+	TSharedRef<FJsonObject> JsonObject = MakeShared<FJsonObject>();
+	JsonObject->SetStringField(TEXT("server_address"), GetAdvertisedGameServerAddress());
+
+	FString RegistrationToken;
+	GConfig->GetString(TEXT("WebApi"), TEXT("RegistrationToken"), RegistrationToken, GGameIni);
+	FParse::Value(FCommandLine::Get(), TEXT("RegistrationToken="), RegistrationToken);
+	JsonObject->SetStringField(TEXT("registration_token"), RegistrationToken);
+
+	FString Body;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Body);
+	FJsonSerializer::Serialize(JsonObject, Writer);
+
+	FHttpRequestRef Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(GetConfiguredWebApiBaseUrl() + TEXT("/servers/register"));
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	Request->SetContentAsString(Body);
+
+	TWeakObjectPtr<UWebApiSubsystem> WeakThis(this);
+	Request->OnProcessRequestComplete().BindLambda(
+		[WeakThis](FHttpRequestPtr, FHttpResponsePtr InResponse, bool bInConnectedSuccessfully)
+		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			if (!bInConnectedSuccessfully || !InResponse.IsValid())
+			{
+				UE_LOG(LogTemp, Error, TEXT("게임 서버 주소를 웹 서버에 등록하지 못했습니다"));
+				return;
+			}
+
+			if (InResponse->GetResponseCode() != 200)
+			{
+				UE_LOG(LogTemp, Error, TEXT("게임 서버 등록 실패 (HTTP %d): %s"),
+					InResponse->GetResponseCode(), *InResponse->GetContentAsString());
+				return;
+			}
+
+			UE_LOG(LogTemp, Display, TEXT("게임 서버 주소 등록 완료: %s"),
+				*WeakThis->GetAdvertisedGameServerAddress());
+		});
+
+	Request->ProcessRequest();
 }
 
 void UWebApiSubsystem::SendAuthRequest(const FString& InServerIP, const FString& InPath,
@@ -105,9 +157,29 @@ void UWebApiSubsystem::HandleAuthResponse(FHttpResponsePtr InResponse, const boo
 			Data->Idx = JsonObject->GetIntegerField(TEXT("idx"));
 			Data->Nickname = JsonObject->GetStringField(TEXT("nickname"));
 			Data->Level = JsonObject->GetIntegerField(TEXT("level"));
+			JsonObject->TryGetStringField(TEXT("server_address"), Data->GameServerAddress);
 			Data->bLoggedIn = true;
 		}
 	}
 
 	InDelegate.Broadcast(true, TEXT(""));
+}
+
+FString UWebApiSubsystem::GetConfiguredWebApiBaseUrl() const
+{
+	FString BaseUrl;
+	GConfig->GetString(TEXT("WebApi"), TEXT("BaseUrl"), BaseUrl, GGameIni);
+	FParse::Value(FCommandLine::Get(), TEXT("WebApiBaseUrl="), BaseUrl);
+
+	BaseUrl.RemoveFromEnd(TEXT("/"));
+	return BaseUrl.IsEmpty() ? TEXT("http://127.0.0.1:8080") : BaseUrl;
+}
+
+FString UWebApiSubsystem::GetAdvertisedGameServerAddress() const
+{
+	FString ServerAddress;
+	GConfig->GetString(TEXT("WebApi"), TEXT("GameServerAddress"), ServerAddress, GGameIni);
+	FParse::Value(FCommandLine::Get(), TEXT("PublicServerAddress="), ServerAddress);
+
+	return ServerAddress.IsEmpty() ? TEXT("127.0.0.1:7777") : ServerAddress;
 }

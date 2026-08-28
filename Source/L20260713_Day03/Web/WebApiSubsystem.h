@@ -29,6 +29,9 @@ public:
 
 	void RequestSignUp(const FString& InServerIP, const FString& InUserID, const FString& InPassword);
 
+	/** 현재 실행 중인 리슨/전용 서버 주소를 웹 서버에 등록한다. */
+	void RequestGameServerRegistration();
+
 private:
 
 	void SendAuthRequest(const FString& InServerIP, const FString& InPath,
@@ -37,4 +40,8 @@ private:
 
 	void HandleAuthResponse(FHttpResponsePtr InResponse, const bool bInConnectedSuccessfully,
 		FWebApiResultSignature& InDelegate, const bool bInIsLogin);
+
+	FString GetConfiguredWebApiBaseUrl() const;
+
+	FString GetAdvertisedGameServerAddress() const;
 };
